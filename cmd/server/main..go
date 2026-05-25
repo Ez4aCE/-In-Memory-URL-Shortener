@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 type ShortenRequest struct {
@@ -17,6 +18,14 @@ type ShortenResponse struct {
 
 type URLStore struct {
 	urls map[string]string
+	mu   sync.RWMutex
+}
+
+func (s *URLStore) Get(shortcode string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	url, ok := s.urls[shortcode]
+	return url, ok
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -40,8 +49,9 @@ func shortenHandler(store *URLStore) http.HandlerFunc {
 			return
 		}
 		shortcode := "abc123"
+		store.mu.Lock()
+		defer store.mu.Unlock()
 		store.urls[shortcode] = req.URL
-
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
