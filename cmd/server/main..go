@@ -32,6 +32,22 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "ok")
 }
 
+func RedirectHandler(store *URLStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		shortCode := strings.TrimPrefix(r.URL.Path, "/")
+		if shortCode == "" {
+			http.Error(w, "short code required", http.StatusNotFound)
+			return
+		}
+		url, ok := store.Get(shortCode)
+		if !ok {
+			http.Error(w, "short code not found", http.StatusNotFound)
+			return
+		}
+		http.Redirect(w, r, url, http.StatusFound)
+	}
+}
+
 func shortenHandler(store *URLStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -73,6 +89,7 @@ func main() {
 	store := &URLStore{urls: make(map[string]string)}
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/shorten", shortenHandler(store))
+	mux.HandleFunc("/", RedirectHandler(store))
 	fmt.Println("Listening on port 8080")
 	err := http.ListenAndServe(":8080", mux)
 	if err != nil {
