@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -76,4 +77,7 @@ func ShortenHandler(store *store.URLStore) http.HandlerFunc {
 		}
 		//fmt.Println(store.urls)
 	}
+}
+func HealthHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "ok")
 }

@@ -8,16 +8,12 @@ import (
 	"github.com/Ez4aCE/url-shortener/internal/store"
 )
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "ok")
-}
-
 func main() {
 	mux := http.NewServeMux()
 	urlStore := store.NewURLStore()
 
 	mux.HandleFunc("/stats/", handler.StatsHandler(urlStore))
-	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/health", handler.HealthHandler)
 	mux.HandleFunc("/shorten", handler.ShortenHandler(urlStore))
 	mux.HandleFunc("/", handler.RedirectHandler(urlStore))
 
