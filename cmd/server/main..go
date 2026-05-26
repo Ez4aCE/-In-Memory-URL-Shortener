@@ -19,8 +19,13 @@ type ShortenResponse struct {
 }
 
 type URLStore struct {
-	urls map[string]string
+	urls map[string]URLData
 	mu   sync.RWMutex
+}
+
+type URLData struct {
+	URL    string `json:"url"`
+	Clicks int    `json:"clicks"`
 }
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -44,11 +49,22 @@ func isValidURL(rawURL string) bool {
 	return true
 }
 
-func (s *URLStore) Get(shortcode string) (string, bool) {
+func (s *URLStore) Get(shortcode string) (URLData, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	url, ok := s.urls[shortcode]
-	return url, ok
+	data, ok := s.urls[shortcode]
+	return data, ok
+}
+
+func (s *URLStore) IncrementClicks(shortcode string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, exists := s.urls[shortcode]
+	if !exists {
+		return
+	}
+	data.Clicks++
+	s.urls[shortcode] = data
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +83,10 @@ func (s *URLStore) Save(url string) string {
 		shortCode = generateShortCode(8)
 	}
 
-	s.urls[shortCode] = url
+	s.urls[shortCode] = URLData{
+		URL:    url,
+		Clicks: 0,
+	}
 	return shortCode
 }
 
@@ -78,12 +97,30 @@ func RedirectHandler(store *URLStore) http.HandlerFunc {
 			http.Error(w, "short code required", http.StatusNotFound)
 			return
 		}
-		url, ok := store.Get(shortCode)
+		data, ok := store.Get(shortCode)
 		if !ok {
 			http.Error(w, "short code not found", http.StatusNotFound)
 			return
 		}
-		http.Redirect(w, r, url, http.StatusFound)
+		store.IncrementClicks(shortCode)
+		http.Redirect(w, r, data.URL, http.StatusFound)
+	}
+}
+
+func StatsHandler(store *URLStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		shortCode := strings.TrimPrefix(r.URL.Path, "/stats/")
+		data, ok := store.Get(shortCode)
+		if !ok {
+			http.Error(w, "short code not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(data)
+		if err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -123,8 +160,9 @@ func shortenHandler(store *URLStore) http.HandlerFunc {
 
 func main() {
 	mux := http.NewServeMux()
-	store := &URLStore{urls: make(map[string]string)}
+	store := &URLStore{urls: make(map[string]URLData)}
 
+	mux.HandleFunc("/stats/", StatsHandler(store))
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/shorten", shortenHandler(store))
 	mux.HandleFunc("/", RedirectHandler(store))
