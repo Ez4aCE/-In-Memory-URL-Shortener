@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 )
@@ -30,6 +31,17 @@ func generateShortCode(length int) string {
 		code[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(code)
+}
+
+func isValidURL(rawURL string) bool {
+	parsedURL, err := url.ParseRequestURI(rawURL)
+	if err != nil {
+		return false
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return false
+	}
+	return true
 }
 
 func (s *URLStore) Get(shortcode string) (string, bool) {
@@ -87,7 +99,7 @@ func shortenHandler(store *URLStore) http.HandlerFunc {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(req.URL) == "" {
+		if strings.TrimSpace(req.URL) == "" || !isValidURL(strings.TrimSpace(req.URL)) {
 			http.Error(w, "invalid url", http.StatusBadRequest)
 			return
 		}
