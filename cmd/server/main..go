@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"strings"
 	"sync"
@@ -21,6 +22,16 @@ type URLStore struct {
 	mu   sync.RWMutex
 }
 
+const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func generateShortCode(length int) string {
+	code := make([]byte, length)
+	for i := range code {
+		code[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(code)
+}
+
 func (s *URLStore) Get(shortcode string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -30,6 +41,22 @@ func (s *URLStore) Get(shortcode string) (string, bool) {
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "ok")
+}
+
+func (s *URLStore) Save(url string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	shortCode := generateShortCode(8)
+	for {
+		_, ok := s.urls[shortCode]
+		if !ok {
+			break
+		}
+		shortCode = generateShortCode(8)
+	}
+
+	s.urls[shortCode] = url
+	return shortCode
 }
 
 func RedirectHandler(store *URLStore) http.HandlerFunc {
@@ -64,10 +91,8 @@ func shortenHandler(store *URLStore) http.HandlerFunc {
 			http.Error(w, "invalid url", http.StatusBadRequest)
 			return
 		}
-		shortcode := "abc123"
-		store.mu.Lock()
-		defer store.mu.Unlock()
-		store.urls[shortcode] = req.URL
+		shortcode := store.Save(req.URL)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
@@ -80,13 +105,14 @@ func shortenHandler(store *URLStore) http.HandlerFunc {
 			http.Error(w, "failed to encode response ", http.StatusInternalServerError)
 			return
 		}
-		fmt.Println(store.urls)
+		//fmt.Println(store.urls)
 	}
 }
 
 func main() {
 	mux := http.NewServeMux()
 	store := &URLStore{urls: make(map[string]string)}
+
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/shorten", shortenHandler(store))
 	mux.HandleFunc("/", RedirectHandler(store))
