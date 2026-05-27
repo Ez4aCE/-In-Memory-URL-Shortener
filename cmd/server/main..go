@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/Ez4aCE/url-shortener/internal/handler"
+	"github.com/Ez4aCE/url-shortener/internal/middleware"
 	"github.com/Ez4aCE/url-shortener/internal/store"
 )
 
@@ -18,8 +19,8 @@ func main() {
 	mux.HandleFunc("/", handler.RedirectHandler(urlStore))
 
 	fmt.Println("Listening on port 8080")
-
-	err := http.ListenAndServe(":8080", mux)
+	loggedMux := middleware.Logging(mux)
+	err := http.ListenAndServe(":8080", loggedMux)
 	if err != nil {
 		fmt.Println("Server Error", err)
 	}
